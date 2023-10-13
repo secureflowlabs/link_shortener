@@ -1,37 +1,42 @@
 mod db;
 mod error;
+mod api;
 
+use api::*;
 use error::*;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_web::web::Data;
 use sqlx::{sqlite::SqlitePool, Pool};
-use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize)]
-struct ShortenRequest {
-    url: String,
-}
-
-#[derive(Serialize)]
-struct ShortenResponse {
-    short_url: String,
-}
 
 fn redirect(pool: web::Data<SqlitePool>,
-            req: web::Json<ShortenRequest>,) -> impl Responder {
-    "Not implemented"
+            req: web::Json<ShortenRequest>,) -> LinkShortenerResult<HttpResponse> {
+    let header = ("Location", req.url.clone());
+
+    Ok(HttpResponse::TemporaryRedirect()
+        .append_header(header)
+        .finish())
 }
 
 async fn shorten(
     pool: web::Data<SqlitePool>,
     req: web::Json<ShortenRequest>,
 ) -> impl Responder {
+
+    let Ok(short_url) = generate_short_url() else {
+        return HttpResponse::UnprocessableEntity().json("URL doesn't work")
+    };
+
+    let short_url = match generate_short_url() {
+        Ok(url) => url,
+        Err(e) => String::from(""),
+    };
+
     let result = sqlx::query_as!(
         db::link::ShortenedURL,
         "INSERT INTO urls (original_url, short_url) VALUES (?, ?) RETURNING id, original_url, short_url",
         &req.url,
-        generate_short_url()
+        short_url
     )
         .fetch_one(pool.get_ref())
         .await;
@@ -44,18 +49,11 @@ async fn shorten(
     }
 }
 
-fn generate_short_url() -> String {
-    // Generate a unique short URL
-    // You can use any logic to generate a short URL here
-    // For simplicity, we'll use a UUID.
-    uuid::Uuid::new_v4().to_string()
-}
-
 #[tokio::main]
 async fn main() -> LinkShortenerResult<()> {
     dotenv::dotenv().ok();
 
-    let db_path = std::env::var("DB_PATH")?;
+    let db_path = std::env::var("DATABASE_URL")?;
     // Initialize the SQLite database pool
     let db_pool = SqlitePool::connect(db_path.as_str()).await.unwrap();
     let url = format!("{}:{}", std::env::var("LOCAL_IP")?, std::env::var("LOCAL_PORT")?);
@@ -64,8 +62,9 @@ async fn main() -> LinkShortenerResult<()> {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS urls (
-            id varchar(10) PRIMARY KEY,
-            original_url TEXT NOT NULL
+            id bigint,
+            original_url TEXT NOT NULL,
+            short_url TEXT NOT NULL
         )
     "#,
     )
