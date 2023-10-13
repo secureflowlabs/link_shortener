@@ -1,21 +1,20 @@
 use std::collections::HashMap;
-use mongodb::Client;
-use mongodb::results::{InsertManyResult, InsertOneResult};
+use std::str::FromStr;
 use serde::{Serialize, Deserialize};
-use crate::db::DbResult;
 use crate::error::LinkShortenerError;
-
 pub type LinkResult<T> = Result<T, LinkShortenerError>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkMeta {
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
     headers: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[table(name = "links")]
 pub struct Link {
+    id: Option<Thing>,
     target: url::Url,
     shortened: url::Url,
     meta: LinkMeta,
@@ -34,23 +33,14 @@ impl LinkMeta {
 impl Link {
     pub fn new(target: url::Url, meta: LinkMeta) -> LinkResult<Self> {
         let shortened = url::Url::parse("https://test.com")?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let id = Some(Thing::from_str(&id).unwrap());
 
         Ok(Self {
+            id,
             target,
             shortened,
             meta,
         })
-    }
-
-    pub async fn write(&self,client: &Client, link: &Link) -> DbResult<InsertOneResult> {
-        let db = client.default_database().expect("Default database not found");
-
-        Ok(db.collection::<Link>("links").insert_one(link.to_owned(), None).await?)
-    }
-
-    pub async fn write_all(&self,client: &Client, links: Vec<&Link>) -> DbResult<InsertManyResult> {
-        let db = client.default_database().expect("Default database not found");
-
-        Ok(db.collection::<Link>("links").insert_many(links, None).await?)
     }
 }
