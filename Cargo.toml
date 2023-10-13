@@ -7,6 +7,16 @@ authors = ["tstaetter"]
 rust-version = "1.73.0"
 readme = "README.md"
 
+[[bin]]
+name = "service"
+test = false
+path = "src/main.rs"
+
+[[bin]]
+name = "setup"
+test = false
+path = "src/setup.rs"
+
 [dependencies]
 actix-rt = "2.9.0"
 actix-web = "4.4.0"
