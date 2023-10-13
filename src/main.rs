@@ -7,15 +7,31 @@ use error::*;
 
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_web::web::Data;
-use sqlx::{sqlite::SqlitePool, Pool};
+use sqlx::sqlite::SqlitePool;
+use crate::db::link::ShortenedURL;
 
-fn redirect(pool: web::Data<SqlitePool>,
-            req: web::Json<ShortenRequest>,) -> LinkShortenerResult<HttpResponse> {
-    let header = ("Location", req.url.clone());
+async fn redirect(pool: web::Data<SqlitePool>,
+            req: web::Json<ShortenRequest>,) -> impl Responder {
+    let result = sqlx::query_scalar::<_, String>(
+        r#"SELECT short_url FROM links where original_url = ?"#
+    )
+        .bind(req.url.clone())
+        .fetch_one(pool.get_ref())
+        .await;
 
-    Ok(HttpResponse::TemporaryRedirect()
-        .append_header(header)
-        .finish())
+    match result {
+        Ok(target_url) => {
+            let header = ("Location", target_url);
+
+            HttpResponse::TemporaryRedirect()
+                .append_header(header)
+                .finish()
+        },
+        Err(e) => {
+            HttpResponse::NotFound().json(format!("URL not found: {e}"))
+        },
+    }
+
 }
 
 async fn shorten(
@@ -27,17 +43,11 @@ async fn shorten(
         return HttpResponse::UnprocessableEntity().json("URL doesn't work")
     };
 
-    let short_url = match generate_short_url() {
-        Ok(url) => url,
-        Err(e) => String::from(""),
-    };
-
-    let result = sqlx::query_as!(
-        db::link::ShortenedURL,
-        "INSERT INTO urls (original_url, short_url) VALUES (?, ?) RETURNING id, original_url, short_url",
-        &req.url,
-        short_url
+    let result = sqlx::query_as::<_, ShortenedURL>(
+        r#"INSERT INTO urls (original_url, short_url) VALUES (?, ?) RETURNING id, original_url, short_url"#
     )
+        .bind(&req.url)
+        .bind(short_url)
         .fetch_one(pool.get_ref())
         .await;
 
@@ -71,6 +81,8 @@ async fn main() -> LinkShortenerResult<()> {
         .execute(&db_pool)
         .await
         .unwrap();
+
+    println!("Starting HTTP server");
 
     Ok(HttpServer::new(move || {
         App::new()

@@ -5,12 +5,12 @@ use crate::error::LinkShortenerResult;
 
 #[derive(Serialize, Deserialize)]
 pub struct ShortenRequest {
-    pub(crate) url: String,
+    pub url: String,
 }
 
 #[derive(Serialize)]
 pub struct ShortenResponse {
-    pub(crate) short_url: String,
+    pub short_url: String,
 }
 
 pub fn generate_short_url() -> LinkShortenerResult<String> {
