@@ -14,7 +14,8 @@ pub struct ShortenResponse {
 }
 
 pub fn generate_short_url() -> LinkShortenerResult<String> {
-    Ok(format!("{}{}", std::env::var("URL_PREFIX")?, shortened_key()))
+    // Ok(format!("{}{}", std::env::var("URL_PREFIX")?, shortened_key()))
+    Ok(shortened_key())
 }
 
 // Generate shortened key for URL

@@ -1,67 +1,22 @@
 mod db;
 mod error;
 mod api;
+mod handlers;
 
-use api::*;
 use error::*;
+use handlers::*;
 
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpServer};
 use actix_web::web::Data;
 use sqlx::sqlite::SqlitePool;
-use crate::db::link::ShortenedURL;
 
-async fn redirect(pool: web::Data<SqlitePool>,
-            req: web::Json<ShortenRequest>,) -> impl Responder {
-    let result = sqlx::query_scalar::<_, String>(
-        r#"SELECT short_url FROM links where original_url = ?"#
-    )
-        .bind(req.url.clone())
-        .fetch_one(pool.get_ref())
-        .await;
 
-    match result {
-        Ok(target_url) => {
-            let header = ("Location", target_url);
 
-            HttpResponse::TemporaryRedirect()
-                .append_header(header)
-                .finish()
-        },
-        Err(e) => {
-            HttpResponse::NotFound().json(format!("URL not found: {e}"))
-        },
-    }
-
-}
-
-async fn shorten(
-    pool: web::Data<SqlitePool>,
-    req: web::Json<ShortenRequest>,
-) -> impl Responder {
-
-    let Ok(short_url) = generate_short_url() else {
-        return HttpResponse::UnprocessableEntity().json("URL doesn't work")
-    };
-
-    let result = sqlx::query_as::<_, ShortenedURL>(
-        r#"INSERT INTO urls (original_url, short_url) VALUES (?, ?) RETURNING id, original_url, short_url"#
-    )
-        .bind(&req.url)
-        .bind(short_url)
-        .fetch_one(pool.get_ref())
-        .await;
-
-    match result {
-        Ok(row) => HttpResponse::Ok().json(ShortenResponse {
-            short_url: row.short_url,
-        }),
-        Err(_) => HttpResponse::InternalServerError().finish(),
-    }
-}
 
 #[tokio::main]
 async fn main() -> LinkShortenerResult<()> {
     dotenv::dotenv().ok();
+    tracing_subscriber::fmt().init();
 
     let db_path = std::env::var("DATABASE_URL")?;
     // Initialize the SQLite database pool
