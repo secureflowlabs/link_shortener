@@ -1,6 +1,7 @@
 use actix_web::{HttpResponse, Responder, web};
 use sqlx::SqlitePool;
-use crate::api::{generate_short_url, shortened_key, ShortenRequest, ShortenResponse};
+use crate::api::{generate_short_url, ShortenRequest, ShortenResponse};
+use crate::db::{GET_REDIRECT_URL, INSERT_LINK};
 use crate::db::link::ShortenedURL;
 
 pub async fn redirect(pool: web::Data<SqlitePool>,
@@ -8,9 +9,7 @@ pub async fn redirect(pool: web::Data<SqlitePool>,
     tracing::info!("Call to redirect received");
 
     let data = req.into_inner();
-    let result = sqlx::query_scalar::<_, String>(
-        r#"SELECT original_url FROM urls where short_url = ?"#
-    )
+    let result = sqlx::query_scalar::<_, String>(GET_REDIRECT_URL)
         .bind(data)
         .fetch_one(pool.get_ref())
         .await;
@@ -40,18 +39,19 @@ pub async fn shorten(
         return HttpResponse::UnprocessableEntity().json("URL doesn't work")
     };
 
-    let result = sqlx::query_as::<_, ShortenedURL>(
-        r#"INSERT INTO urls (original_url, short_url) VALUES (?, ?) RETURNING id, original_url, short_url"#
-    )
-        .bind(&req.url)
+    let result = sqlx::query_as::<_, ShortenedURL>(INSERT_LINK)
         .bind(short_url)
+        .bind(&req.url)
         .fetch_one(pool.get_ref())
         .await;
 
     match result {
         Ok(row) => HttpResponse::Ok().json(ShortenResponse {
-            short_url: row.short_url,
+            short_url: row.id,
         }),
-        Err(_) => HttpResponse::InternalServerError().finish(),
+        Err(e) => {
+            tracing::error!("Can't insert URL: {e}");
+            HttpResponse::InternalServerError().finish()
+        },
     }
 }

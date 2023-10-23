@@ -9,8 +9,7 @@ use handlers::*;
 use actix_web::{web, App, HttpServer};
 use actix_web::web::Data;
 use sqlx::sqlite::SqlitePool;
-
-
+use crate::db::CREATE_TABLE;
 
 
 #[tokio::main]
@@ -24,20 +23,12 @@ async fn main() -> LinkShortenerResult<()> {
     let url = format!("{}:{}", std::env::var("LOCAL_IP")?, std::env::var("LOCAL_PORT")?);
 
     // Create the `urls` table if it doesn't exist
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS urls (
-            id bigint,
-            original_url TEXT NOT NULL,
-            short_url TEXT NOT NULL
-        )
-    "#,
-    )
+    sqlx::query(CREATE_TABLE)
         .execute(&db_pool)
         .await
         .unwrap();
 
-    println!("Starting HTTP server");
+    tracing::info!("Starting HTTP server");
 
     Ok(HttpServer::new(move || {
         App::new()
