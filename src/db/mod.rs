@@ -1,6 +1,4 @@
-use crate::error::LinkShortenerError;
 pub mod link;
-pub type DbResult<T> = Result<T, LinkShortenerError>;
 
 pub const CREATE_TABLE: &str = r#"
         CREATE TABLE IF NOT EXISTS urls (
